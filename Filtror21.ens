@@ -1,0 +1,635 @@
+;Autores: Daniel Corrales Falco (190410) y Luis Arija Gonzalez (190324)
+;Para subrutinas que no invocan a otras (Nivel 1), usa r2-r9 sin reparos. 
+;Ya que las Subrutinas de Nivel 2 hacen todas las operaciones antes de invocar a las de nivel 1, tambien pueden usar r2-r9
+;Subrutinas de Nivel 1: nFiltrados, Sqrt1d, SubMatriz, ValorPixel
+;Subrutinas de Nivel 2: Comp, FilPixel
+;Subrutina de Nivel 3: Filtro
+;Subrutina de Nivel 4: FiltRec 
+;Macros
+PUSH:	MACRO(reg)			
+	subu  r30,r30,4			
+	st    reg,r30,r0		
+ENDMACRO
+
+POP:	MACRO(reg)			
+	ld reg,r30,r0		
+	addu  r30,r30,4			
+ENDMACRO
+
+LEA:	MACRO(reg,etiq)		
+	or reg,r0,low(etiq)	
+	or.u reg,reg,high(etiq)	
+ENDMACRO
+
+LOAD:	MACRO(ra,eti)		;macro para cargar de memoria el primer valor de eti en ra
+	LEA(ra,eti)				;carga de memoria el valor de eti en ra
+	ld  ra,ra,r0			;carga en ra el primer valor de ra
+ENDMACRO
+
+;Programas de prueba principales
+        org 4
+;-------------------------------------------------------------------------------------
+                ;Prueba Sqrt1d 
+                ;Llama a Sqrt1d pasandole el parametro 36
+;-------------------------------------------------------------------------------------
+testSqrtd1:	LEA(r30,0xF000)		;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+	        LOAD(r10,36)		;cargamos el valor de un numero con raiz exacta (aleatorio y especifico de esta prueba) en r28 (registro que no hemos usado)
+	        PUSH(r10)		;hacemos push de r28, parametro que recibira Sqrt1d
+	        bsr	 Sqrt1d		;se llamamos a Sqrt1d, como resultado esperamos un 6
+	        addu r30,r30,4		;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+                ;Prueba nFiltrados 
+                ;Llamada a nFiltrados pasandole un parametro negativo 
+;-------------------------------------------------------------------------------------
+testNfiltrados:	LEA(r30,0xF000)		;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+	        LOAD(r10,-38)		;cargamos -38(elegido al azar) en un registro (r28)
+	        PUSH(r10)		;hacmeos push de r28, parametro que recibira nFiltrados
+	        bsr	 nFiltrados	;se llamamos a nFiltrados
+	        addu r30,r30,4		;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+		;Pruebas Comp 
+;-------------------------------------------------------------------------------------
+                ;Prueba 1: Llama a Comp pasandole la misma imagen de 3x4 dos veces 
+;-------------------------------------------------------------------------------------
+PPALComp:	LEA(r30,0xF000)		;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+	        LEA(r28,imagen1)	;cargamos imagen1 en r28
+	        LEA(r21,imagen1)	;cargamos imagen1 en r21
+	        PUSH(r21)	        ;pasamos r21 como parametro
+	        PUSH(r28)	        ;pasamos r28 como parametro
+	        bsr	 Comp	        ;llamamos a comp
+	        addu r30,r30,8	        ;reiniciamos la pila
+;-------------------------------------------------------------------------------------
+                ;Prueba 2: Llama a Comp pasandole dos imagenes de 4x8 que difieren en la mayoría de sus elementos 
+;-------------------------------------------------------------------------------------
+                LEA(r28,imagen2)	;cargamos imagen2 en r28
+	        LEA(r21,imagen3)	;cargamos imagen3 en r21
+	        PUSH(r21)		;pasamos r21 como parametro
+	        PUSH(r28)		;pasamos r28 como parametro
+	        bsr	 Comp		;se llama a Comp
+	        addu r30,r30,8	        ;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+		;Pruebas SubMatriz 
+;-------------------------------------------------------------------------------------
+                ;Prueba 1: Llamamos a SubMatriz y le pasamos una imagen 3x4. Ha de extraer la subimagen con centro en el pixel (1,1)
+;-------------------------------------------------------------------------------------
+PPALSubM:	LEA(r30,0xF000)	        ;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+		LEA(r16,imagen1)        ;cargamos imagen1 en r16
+		LEA(r17,SubIm1)	        ;cargamos subImagen en r17
+		LOAD(r18,1)	        ;cargamos 1 en r18 (i)
+		LOAD(r19,1)	        ;cargamos 1 en r19 (j)
+		PUSH(r19)	        ;pasamos como parametro j
+		PUSH(r18)	        ;pasamos como parametro i
+		PUSH(r17)	        ;pasamos como parametro subImagen
+		PUSH(r16)	        ;pasamos como parametro imagen1
+		bsr  SubMatriz	        ;llamamos a SubMatriz
+		addu r30,r30,16	        ;reiniciamos la pila
+;-------------------------------------------------------------------------------------
+                ;Prueba 2: Llamamos a SubMatriz y le pasamos una imagen 4x8. Ha de extraer la subimagen con centro en el pixel (1,2)
+;-------------------------------------------------------------------------------------
+                LEA(r16,imagen2)	;cargamos imagen2 en r16
+		LEA(r17,SubIm1)         ;cargamos subImagen en r17
+		LOAD(r18,1)	        ;cargamos 1 en r18 (i)
+		LOAD(r19,2)	        ;cargamos 2 en r19 (j)
+		PUSH(r19)		;pasamos como parametro j
+		PUSH(r18)		;pasamos como parametro i
+		PUSH(r17)		;pasamos como parametro subImagen
+		PUSH(r16)		;pasamos como parametro imagen1
+		bsr  SubMatriz	        ;llamamos a SubMatriz
+		addu r30,r30,16	        ;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+                ;Prueba ValorPixel 
+                ;Llama a ValorPixel pasandole una subimagen (SubIm1) y una matriz de filtro (MFiltro1)
+;-------------------------------------------------------------------------------------
+PPALValPix:	LEA(r30,0xF000)		;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+		LEA(r20,SubIm1)		;cargamos SubIm1 en r20
+		LEA(r21,MFiltro1)	;cargamos MFiltro en r21
+		PUSH(r21)		;pasamos como parametro MFiltro
+		PUSH(r20)		;pasamos como parametro SubIm1
+		bsr	 ValorPixel	;llamamos a ValorPixel
+		addu r30,r30,8		;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+                ;Prueba FilPixel 
+		;Llamamos a FilPixel y le pasamos una imagen de 5x5 y un filtro identidad que se aplica al pixel (2,2)
+;-------------------------------------------------------------------------------------
+PPALFilPix:	LEA(r30,0xF000)		;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+		LEA(r22,imagen4)        ;cargamos imagen4 en r22 
+		LOAD(r23,2)		;cargamos 2 en r23 (i)
+		LOAD(r24,2)		;cargamos 2 en r24 (j)
+		LEA(r25,MFiltro1)	;cargamos el filtro en r25
+		PUSH(r25)		;pasamos como parametro MFiltro
+		PUSH(r24)		;pasamos como parametro  j
+		PUSH(r23)		;pasamos como parametro  i
+		PUSH(r22)		;pasamos como parametro imagen4
+		bsr  FilPixel		;llamamos a filpixel
+		addu r30,r30,16		;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+                ;Prueba Filtro 
+		;Llama a Filtro pasandole una imagen 3x4 y el filtro MFiltro1
+;-------------------------------------------------------------------------------------
+PPALFilt:	LEA(r30,0xF000)		;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+		LEA(r22,imagen1)	;cargamos imagen1 en r22 
+		LEA(r23,imFiltrada)	;cargamos imFiltrada en r23
+		LEA(r24,MFiltro1)	;cargamos el filtro en r24
+		PUSH(r24)		;pasamos como parametro MFiltro
+		PUSH(r23)		;pasamos como parametro imFiltrada
+		PUSH(r22)		;pasamos como parametro imagen1
+		bsr  Filtro 		;llamamos a Filtro
+		addu r30,r30,12		;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+                ;Prueba FiltRec 
+		;Llamamos a FiltRec sobre una imagen 5x5, con un filtro que sustituye cada elemento por la media de los que le rodean.
+                ;NCambios = 500 y MaxFiltrados = 5
+;-------------------------------------------------------------------------------------
+PPALFiltRec:	LEA(r30,0xF000)		;inicializamos la pila y dirigimos el puntero (r30) al principio (H'F000)
+		PUSH(r0)		;pasamos r0 como parametro	
+		bsr  nFiltrados		;llamamos a nFiltrados para iniciar nF a 0
+		LEA(r20,imagen4)	;cargamos imagen4 en r20
+		LEA(r21,imFiltrada)	;cargamos imFiltrada en r21
+		LEA(r22,MFiltro1)	;cargamos el filtro en r22
+		LOAD(r23,500)	        ;pasamos el 500 como valor de nCambios
+		LOAD(r24,5)	        ;pasamos el 5 como valor de MaxFiltrados
+		PUSH(r24)		;pasamos como parametro MaxFiltrados
+		PUSH(r23)		;pasamos como parametro nCambios
+		PUSH(r22)		;pasamos como parametro MFiltro
+		PUSH(r21)		;pasamos como parametro imFiltrada
+		PUSH(r20)		;pasamos como parametro imagen4
+		bsr  FiltRec		;llamamos a FiltRec
+		addu r30,r30,24		;reiniciamos la pila
+                stop
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de nivel 1, uso de registros r2-r9
+
+nFiltrados:     PUSH(r1);                       se guarda direc. de retorno
+		PUSH(r31);                      se guarda FP
+		or  r31,r30,r30;                r31 <- r30 |   Activacion Marco de Pila
+
+                ld      r2, r31, 8;             Guardo oper en r2.
+                cmp     r3, r2, 0;              Comparo oper con 0
+                bb1     lt, r3, MenorFilt;      Si es menor que 0, me voy a MenorFilt.
+
+                or      r29, r2, 0;             Si es mayor o igual a 0 copio NF a r29.
+                br      FinalFilt;              Salto a FinalFilt
+
+MenorFilt:      ld      r4, r0, 0;              Guardo en r4 NF
+                addu    r4, r4, 1;              Sumo 1 a r4
+                or      r29, r4, 0;             Copio el nuevo NF a r29;
+
+FinalFilt:      st      r29, r0, 0;             Guardo el nuevo NF en r0;
+
+                or  r30,r31,r0;                 Dirige SP (r30) al punto de origen (FP)
+		POP(r31);                       Recupera FP
+		POP(r1);                        Recupera direcc. retorno
+                jmp (r1);
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de nivel 1, uso de registros r2-r9
+Sqrt1d:         PUSH(r1);                       se guarda direc. de retorno
+		PUSH(r31);                      se guarda FP
+		or  r31,r30,r0;                r31 <- r30 |   Activacion Marco de Pila
+
+                ld      r2, r31, 8;             Guardo en r2 Num
+		cmp     r3,r12,0xFFFF;          Compara si el valor en r19 tiene al menos 4 Fs seguidas (es numero negativo)
+		bb0     he,r3,2;                Si el numero es positivo, salta al una instruccion (al siguiente cmp)
+                subu    r2,r0,r2;               Si el numero es negativo, lo invierte
+
+                cmp     r3, r2, 2;              Comparo r2 con 2;
+                bb1     lt, r3, NiaDos;         Si es menor que 2, le mando a NiaDos
+
+                mulu    r4, r2, 100;            A r4 le doy el valor de a (Numx100)
+                addu    r5, r0, 1;              A r5 le doy el valor de b (1)
+
+BucleSq:        add     r4, r4, r5;             a= a+b;
+                divs    r4, r4, 2;              a=a/2;
+                mulu    r5, r2, 100;            b= Numx100
+                divs    r5, r5, r4;             b=b/a 
+                cmp     r3, r5, r4;             Comparo nuevo b con nuevo a
+                bb1     ls, r3, PocaDif;        si b<=a, los llevo a PocaDif, si no, los intercambio
+
+                add      r3, r4, 0;              Copio "a" a r3
+                add      r4, r5, 0;              Copio "b" a r4
+                add      r5, r3, 0;              Copio "a" a r5. En esencia hemos intercambiado a y b;
+
+PocaDif:        sub     r6, r4, r5;             guardo en r6 el resultado de a-b
+                cmp     r3, r6, 1;              Comparo r6 con 1;
+                bb1     hi, r3, BucleSq;        Si r6 es mayor a 1, realizo el bucle de nuevo
+                or      r29, r5, 0;             Copio b a r29;
+                br      FinalSq;                Salto al final
+
+NiaDos:         mulu    r29, r2, 10;
+
+FinalSq:        or  r30,r31,r0;                 Dirige SP (r30) al punto de origen (FP)
+		POP(r31);                       Recupera FP
+		POP(r1);                        Recupera direcc. retorno
+                jmp(r1) 
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de nivel 2, pero puedo usar r2-r9 debido a que todas las operaciones se realizan antes de invocar a la subrutina de nivel 1
+Comp:           PUSH(r1);                       Guardo r1 pues vamos a llamar a subrutinas
+                PUSH(r31);                      Lo mismo
+                or      r31,r30, 0;
+
+                ld      r2, r31, 8;             Guardo en r2 el puntero a Imagen1
+                ld      r3, r31, 12;            Guardo en r3 el puntero a Imagen2
+                ld      r4, r2, 0;              Guardo en r4 M, el numero de filas
+                ld      r5, r2, 4;              Guardo en r5 N, el numero de columnas
+
+                addu    r2, r2, 8;              Muevo el puntero al primer pixel de Imagen1
+                addu    r3, r3, 8;              Muevo el puntero al primer pixel de Imagen2
+                mulu    r4, r4, r5;             Guardo en r4 el numero de pixeles de ambas imagenes (MxN)
+                addu    r5, r0, 0;              Inicializo r5 a 0, ya que actuara como Dif
+
+BucleComp:      ld.bu   r6, r2, 0;              Cargo en r6 el pixel al que apunta el puntero de Imagen1
+                ld.bu   r7, r3, 0;              Cargo en r7 el pixel al que apunta el puntero de Imagen2
+                subu    r6, r6, r7;             Guardo en r6 la diferencia de los pixeles
+                mulu    r6, r6, r6;             Elevo r6 al cuadrado
+                addu    r5, r5, r6;             A r5, que actua como Dif, le sumo r6
+                addu    r2, r2, 1;              Muevo el puntero de Imagen1 al siguiente pixel
+                addu    r3, r3, 1;              Muevo el puntero de Imafen2 al siguiente pixel
+                subu    r4, r4, 1;              Resto 1 al contador
+                cmp     r8, r4, 0;              Comparo r4 (el contador) con 0
+                bb0     eq, r8, BucleComp;      Si r4 no es 0, el bucle sigue
+
+                PUSH(r5);                       Meto r5 (Dif) en la pila para la subrutina Sqrt1d
+                bsr     Sqrt1d;                 Llamo a Sqrt1d, al terminar, r29 ya tiene el valor deseado
+                POP(r5);                        Deshago la pila
+
+                or r30, r31, 0;
+                POP(r31)
+                POP(r1)
+                jmp(r1)
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de nivel 1, uso de registros r2-r9
+ValorPixel:     PUSH(r1)
+                PUSH(r31)
+                or      r31, r30, 0;            Monto la pila.
+
+                ld      r2, r31, 8;             Guardo en r2 el puntero a SubImg
+                ld      r3, r31, 12;            Guardo en r3 el puntero a MFiltro
+                or      r4, r0, 0;              Inicializo el Acc(r4) a 0
+                or      r5, r0, 9;              Como el bucle ha de realizarse 9 veces, inicializo el contador a 9
+
+BuclePixel:     ld.bu   r6, r2, 0;              Cargo el pixel de SubImg en r6
+                ld      r7, r3, 0;              Cargo el elemento multiplicador correspondiente de MFiltro en r7
+                ld      r8, r3, 4;              Cargo el elemento divisor correspondiente de MFiltro en r8
+                
+                mulu    r6, r6, 256;            Multiplico por la constante;
+                muls    r6, r6, r7;             Multiplico por el elemento multiplicador correspondiente
+                divs    r6, r6, r8;             Divido por el elemento divisor correspondiente
+                add     r4, r4, r6;             Acumulo el resultado
+
+                addu    r2, r2, 1;              Apunto al siguiente pixel de SubImg
+                addu    r3, r3, 8;              Apunto a la siguiente pareja de datos de MFiltro
+                subu    r5, r5, 1;              Disminuyo el contador
+                cmp     r9, r5, 0;              Comparo el contador con 0
+                bb0     eq, r9, BuclePixel;     Si no es 0, lo mando a BuclePixel
+
+                divs    r29, r4, 256;           Divido el Acc entre 256 y lo cargo en r29
+
+                or      r30, r31, 0;            Desmonto la pila
+                POP(r31)
+                POP(r1)
+                jmp(r1)
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de nivel 1, uso de registros r2-r9
+SubMatriz:      PUSH(r1)
+                PUSH(r31)
+                or      r31, r30, 0;
+
+                ld      r2, r30, 8;             Cargo en r2 el puntero a Imagen
+                ld      r3, r30, 12;            Cargo en r3 el puntero a SubImg
+                ld      r4, r30, 16;            Cargo en r4 i
+                ld      r5, r30, 20;            Cargo en r5 j
+                ld      r6, r2, 4;              Cargo en r6 N
+
+                addu    r2, r2, 8;              Muevo el puntero de Imagen al primer pixel
+                subu    r7, r4, 1;              r7 toma el valor de i-1
+                mulu    r7, r7, r6;             r7 = (i-1)xN
+                addu    r7, r7, r5;             r7 = (i-1)xN + j
+                subu    r7, r7, 1;              r7 = (i-1)xN + j - 1. En esencia hemos creado un offset que nos lleva al primer pixel de la primera fila
+                or      r9, r0, 0;              r9 toma el valor de 0, ya que lo usaremos como contador
+
+BucleSub1:      ld.bu   r8, r2, r7;             Cargamos el pixel posicion r7 en r8
+                st.b    r8, r3, 0;              Guardo r8 en r3
+                addu    r7, r7, 1;              Aumento el offset en 1
+                addu    r3, r3, 1;              Muevo el puntero al siguiente pixel
+                addu    r9, r9, 1;              Aumento el contador en uno
+                cmp     r5, r9, 3;              Comparo el contador con 3 y lo guardo en r5, ya que no voy a volver a usar j 
+                bb0     eq, r5, BucleSub1;      Si el contador no llega a 3, repite el bucle
+
+                subu    r7, r7, 3;              Disminuyo el offset en 3. r7 = (i-1)xN + j - 1
+                addu    r7, r7, r6;             Aumento el offset en N. r7 = ixN + j - 1
+
+BucleSub2:      ld.bu   r8, r2, r7;             Cargamos el pixel posicion r7 en r8
+                st.b    r8, r3, 0;              Guardo r8 en r3
+                addu    r7, r7, 1;              Aumento el offset en 1
+                addu    r3, r3, 1;              Muevo el puntero al siguiente pixel
+                addu    r9, r9, 1;              Aumento el contador en uno
+                cmp     r5, r9, 6;              Comparo el contador con 6 y lo guardo en r5
+                bb0     eq, r5, BucleSub2;      Si el contador no llega a 6, repite el bucle
+
+                subu    r7, r7, 3;              Disminuyo el offset en 3. r7 = ixN + j - 1
+                addu    r7, r7, r6;             Aumento el offset en N. r7 = (i+1)xN + j - 1
+
+BucleSub3:      ld.bu   r8, r2, r7;             Cargamos el pixel posicion r7 en r8
+                st.b    r8, r3, 0;              Guardo r8 en r3
+                addu    r7, r7, 1;              Aumento el offset en 1
+                addu    r3, r3, 1;              Muevo el puntero al siguiente pixel
+                addu    r9, r9, 1;              Aumento el contador en uno
+                cmp     r5, r9, 9;              Comparo el contador con9 y lo guardo en r5
+                bb0     eq, r5, BucleSub3;      Si el contador no llega a 6, repite el bucle
+
+                or r30, r31, 0;
+                POP(r31)
+                POP(r1)
+                jmp (r1)
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de Nivel 2, pero puedo usar r2-r9 debido a que todas las operaciones se realizan antes de invocar a la subrutina de nivel 1, aunque tambien uso r10 y r11
+FilPixel:       PUSH(r1)
+                PUSH(r31)
+                or      r31, r30, 0;
+
+                ld      r2, r31, 8;             Cargo Imagen en r2
+                ld      r10, r31, 20;           Cargo MFiltro en r10
+                ld      r4, r31, 12;            Cargo i en r4
+                ld      r5, r31, 16;            Cargo j en r5
+                ld      r6, r2, 0;              Cargo M en r6
+                ld      r7, r2, 4;              Cargo N en r7
+
+                cmp     r3, r4, 0;              Compruebo si el pixel pertenece al borde
+                bb1     eq, r3, Borde;          Si i=0, salto a Borde
+                cmp     r3, r5, 0;                  
+                bb1     eq, r3, Borde;          Si j=0, salto a Borde
+
+                subu    r6, r6, 1;              r6=M-1
+                subu    r7, r7, 1;              r7=N-1
+                cmp     r3, r4, r6;           
+                bb1     eq, r3, Borde;          Si i=M-1, salto a Borde
+                cmp     r3, r5, r7;
+                bb1     eq, r3, Borde;          Si j=N-1, salto a Borde
+
+                subu    r30, r30, 12;           Hago espacio en la pila para la SubMatriz
+                or      r11, r30, 0;            Puntero a SubImagen
+
+                PUSH(r5);                       j
+                PUSH(r4);                       i
+                PUSH(r11);                      Puntero a SubImagen
+                PUSH(r2);                       Puntero a Imagen
+                bsr     SubMatriz;              Llamada a SubMatriz
+                POP(r2);                        Pops
+                POP(r11);
+                POP(r4);
+                POP(r5);
+
+                PUSH(r10);                      Puntero a MFiltro
+                PUSH(r11);                      Puntero a SubImg
+                bsr     ValorPixel;
+                POP(r11);
+                POP(r10);  
+                or      r22,r29,0		;recupera de r29 el valor devuelto por ValorPixel y lo guarda en r22
+
+                cmp     r3, r22, 0;             Comparo el resultado con 0
+                bb1     lt, r3, Bajo;           Si es menor, lo mando a Bajo
+
+                cmp     r3, r22, 255;           Comparo el resultado con 255
+                bb1     gt, r3, Alto;           Si es mayor, lo mando a Alto
+
+                br      FinFilPix;
+
+Bajo:           or      r29, r0, 0;             Cambio el resultado por 0
+                br      FinFilPix;               Salto al final de la subrutina
+
+Alto:           or      r29, r0, 255;            Cambio el resultado por 255
+                br      FinFilPix;               Salto al final de la subrutina
+
+Borde:          ld      r7, r2, 4;              Cargo N en r7
+                addu    r2, r2, 8;
+                mulu    r4, r4, r7;             i=ixN
+                addu    r4, r4, r5;             i=ixN+j
+                ld.bu   r29, r2, r4;            Cargo el resultado en r29
+
+FinFilPix:      or      r30, r31, 0;
+                POP(r31)
+                POP(r1)
+                jmp (r1)
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de Nivel 3, de r12 a r18.
+Filtro:         PUSH(r1)
+                PUSH(r31)
+                or      r31, r30, 0;
+
+                ld      r12, r30, 8;            Cargo Imagen en r12
+                ld      r13, r30, 12;           Cargo ImFiltrada en r13
+                ld      r14, r30, 16;           Cargo MFiltro en r14
+                ld      r15, r12, 0;            Cargo M en r15
+                ld      r16, r12, 4;            Cargo N en r16
+                st      r15, r13, 0;            Guardo M en ImFiltrada
+                st      r16, r13, 4;            Guardo N en ImFiltrada
+                
+                addu    r13, r13, 8;            Muevo el puntero al primer pixel
+                or      r17, r0, 0;             Inicializo i a 0
+
+BucleI:         or      r18, r0, 0;             Inicializo j a 0
+
+BucleJ:         PUSH(r14);                      Push MFiltro
+                PUSH(r18);                      Push j
+                PUSH(r17);                      Push i
+                PUSH(r12);                      Push Imagen
+                bsr FilPixel;                   Salto a FilPixel
+                POP(r12);                       Pops
+                POP(r17)
+                POP(r18)
+                POP(r14) 
+                
+                st.b    r29, r13, 0;            Guardo el pixel filtrado en ImFiltrada
+                addu    r13, r13, 1;            Muevo el puntero de ImFiltrada al siguiente pixel
+                addu    r18, r18, 1;            Aumento el contador j en 1
+                cmp     r3, r18, r16;           Comparo j con N
+                bb0     eq, r3, BucleJ;         Si j no es igual a N, continuo con el BucleJ
+
+                addu    r17, r17, 1;            Aumento el contador i en 1
+                cmp     r3, r17, r15;           Comparo i con M
+                bb0     eq, r3, BucleI;         Si i no es igual a M, repito bucleI
+
+                or r30, r31, 0;                 Si i =M y j=N entonces hemos terminado y desmontamos el marco de pila
+                POP(r31)                
+                POP(r1)
+                jmp (r1) 
+;-------------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------------
+;Subrutina de Nivel 4, usar de r19 en adelante.
+FiltRec:        PUSH(r1)
+                PUSH(r31)
+                or      r31, r30, 0;
+
+                ld      r19, r30, 8;            Cargo puntero a ImagenIn en r19
+                ld      r20, r30, 12;           Cargo puntero a ImagenOut en r20
+                ld      r21, r30, 16;           Cargo puntero a MFiltro en r21
+                ld      r22, r31, 20;           Cargo puntero a NCambios en r22
+                ld      r23, r31, 20;           Cargo puntero a NCambios en r23 (Despues aqui guardo el resultado de Comp)
+                ld      r24, r31, 24;           Cargo puntero a MaxFiltrados en r24
+                ld      r25, r31, 24;           Cargo puntero a MaxFiltrados en r25 (Aqui guardo el resultado de nFiltrados)
+                ld      r4, r19, 0;             Cargo M en r4
+                ld      r5, r19, 4;             Cargo N en r5
+                
+                mulu    r6, r5, r4;             Guardo en r6 MxN
+                addu    r6, r6, 8;              Se le añade 8 
+                divu    r7, r6, 4;              Guardo en r7 MxN/4
+                mulu    r7, r7, 4;              Multiplico r7 por 4
+                cmp     r3, r7, r6;             
+                bb1     eq, r3, EsCuatro;       Si despues de dividir y multiplicar por 4 sigue igual, saltamos a EsCuatro
+                addu    r7, r7, 4;              Si no es igual, se le suma 4
+
+EsCuatro:       subu    r30, r30, r7;           Creamos el espacio para ImagenTemp
+                st      r4, r30, 0;             Guardo M en ImagenTemp
+                st      r5, r30, 4;             Guardo N en ImagenTemp
+                or      r26, r30, r0;            Guardamos el puntero a ImagenTemp en r26
+
+                PUSH(r22);                      Guardamos r22 (NCambios) en la pila para no perderlo
+		PUSH(r24);                      Guardamos r24 (MaxFiltrados) en la pila para no perderlo
+		PUSH(r6);                       Guardamos r6 (total bytes imagen) en la pila para no perderlo
+		PUSH(r26);                      Guardamos r26 (imagenTMP) en la pila para no perderlo
+
+                PUSH(r21);                      Push MFiltro
+                PUSH(r20);                      Push ImagenOut
+                PUSH(r19);                      Push ImagenIn
+                bsr     Filtro;                 Salto a Filtro
+                POP(r19);                       Pops
+                POP(r20);
+                POP(r21);
+
+                POP(r26);                       Recupera imagenTMP
+                POP(r6);                        Recupera el total de bits de la imagen
+                POP(r24);                       Recupera MaxFiltrados
+                POP(r22);                       Recupera Ncambios
+                
+
+                or      r7, r0, 8;              Inicializo r7 a 8, la posicion del primer pixel 
+CopiaImTemp:    ld.bu   r8, r20, r7;            Saco el pixel de ImagenOut (r20)
+                st.b    r8, r26, r7;            Guardo el pixel en ImagenTemp (r26)
+                addu    r7, r7, 1;              Apunto al siguiente
+                cmp     r3, r7, r6;             Lo comparo con el numero de bits de la imagen
+                bb0     eq, r3, CopiaImTemp;    Si no es 0, lo mando a CopiaImTemp
+
+                PUSH(r22);                      Guardamos r22 (NCambios) en la pila para no perderlo
+		PUSH(r24);                      Guardamos r24 (MaxFiltrados) en la pila para no perderlo
+		PUSH(r26);                      Guardamos r26 (imagenTMP) en la pila para no perderlo
+
+                PUSH(r20);                      Push ImagenOut
+                PUSH(r19);                      Push ImagenIn
+                bsr     Comp;                   Salto a Comp
+                POP(r19);                       Pops
+                POP(r20);
+
+                POP(r26);                       Recupera imagenTMP
+                POP(r24);                       Recupera MaxFiltrados
+                POP(r22);                       Recupera Ncambios
+                
+                or      r23,r29,0;              Guardo en r23 el valor devuelto por Comp (r29)
+                sub     r8, r0, 1;              r8 toma el valor de -1
+
+                PUSH(r23);                      Guardamos r23 (valor devuelto por Comp) en la pila para no perderlo
+                PUSH(r22);                      Guardamos r22 (NCambios) en la pila para no perderlo
+		PUSH(r24);                      Guardamos r24 (MaxFiltrados) en la pila para no perderlo
+		PUSH(r26);                      Guardamos r26 (imagenTMP) en la pila para no perderlo
+
+                PUSH(r8);                       Push -1 
+                bsr     nFiltrados;             Salto a nFiltrados
+                POP(r8);                        Pop
+
+                POP(r26);                       Recupera imagenTMP
+                POP(r24);                       Recupera MaxFiltrados
+                POP(r22);                       Recupera Ncambios
+                POP(r23);                       Recupera r23 (valor devuelto por Comp) de la pila
+
+                or      r25, r29, 0;            Guardo en r25 el valor devuelto por nFiltrados (r29)
+                cmp     r3, r23, r22;           Comparo r23(El resultado de Comp) con r22(NCambios)
+                bb1     lt, r3, CompMenor;      Si Comp es menor que NCambios, salto a CompMenor
+
+                cmp     r3, r25, r24;           Comparo r25(El resultado de nFiltrados) con r24(MaxFiltrados)
+                bb1     eq, r3, MaxLlegado;     Si r25==r24, salto a CompMenor
+
+                PUSH(r24);                      Push MaxFiltrados
+                PUSH(r22);                      Push NCambios
+                PUSH(r21);                      Push MFiltro
+                PUSH(r20);                      Push ImagenOut
+                PUSH(r26);                      Push ImagenIn (ImagenTemp como ImagenIn)
+                bsr     FiltRec;                Salto a FiltRec
+                POP(r26);                       Pops
+                POP(r20);
+                POP(r21);
+                POP(r22);
+                POP(r24);
+                br      FinFiltRec;             Salto a FinFiltRec
+
+CompMenor:      or      r22, r23, 0;            Guardo r23(El ultimo resultado de Comp) en r22(NCambios)
+                or      r24, r25, 0;            Guardo r25(El ultimo resultado de nFiltrados) en r24(MaxFiltrados)
+                or      r27, r0, 0;             Inicializa r27 a 0
+                br      FinFiltRec
+
+MaxLlegado:     sub     r27, r0, 1;             Inicializa r27 a -1   
+                or      r22, r23, 0;            Guardo r23(El ultimo resultado de Comp) en r22(NCambios)
+                br      FinFiltRec
+
+FinFiltRec:     or      r29, r27, 0;            Guardo r27 en r29;
+                or      r30, r31, 0;            Dirige SP (r30) al punto de origen (FP)
+                st      r22, r30, 20;           Guarda en la memoria r22 (NCambios o Comp)
+                st      r24, r30, 24;           Guarda en la memoria r24 (MaxFiltrados o nFiltrados)
+
+                POP(r31);
+                POP(r1);
+                jmp(r1);
+;-------------------------------------------------------------------------------------
+        org 0
+;-------------------------------------------------------------------------------------
+        ;Valores para las pruebas
+        org 0x8060
+imagen1:        data 3, 4 ;M N, tamaño de la imagen
+                data 0x04020306
+                data 0x05070809
+                data 0x05060904
+
+imagen2:        data 4
+                data 8
+                data 0x00201000, 0x00403000 
+                data 0x00605000, 0x00807000 
+                data 0x00605000, 0x00807000 
+                data 0x00201000, 0x00403000 
+
+imagen3:        data 4
+                data 8
+                data 0x07201200, 0x05060302 
+                data 0x20603100, 0x22300011 
+                data 0x00600408, 0x01020304 
+                data 0x05060708, 0x09807040
+
+imagen4:        data 5, 5
+                data 0x04030201, 0x03020105
+                data 0x02010504, 0x01050403
+                data 0x05040302, 0x04030201
+                data 0x10203040 
+
+        org 0x9000
+SubIm1:         data 0x00000000
+                data 0x00000000
+                data 0x00000000
+
+        org 0x9200
+MFiltro1:       data  0, 8, 0, 8, 0, 8  
+                data  0, 8, 1, 8, 0, 8  
+                data  0, 8, 0, 8, 0, 8
+
+        org 0x9500
+imFiltrada: res 8       ;1 palabra para i y otra para j
+            res 64      ;Reservo el espacio equivalente a una imagen 8x8 por si acaso (para tener espacio de sobra) 
